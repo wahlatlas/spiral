@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="de">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width">
+		<meta name="format-detection" content="telephone=no">
+
+		<meta name="robots" content="noindex">
+		<meta name="description" content="">
+
+		<title>Absatz von Bier: Deutschland, Monate</title>
+
+   </head>
+
+   <script src="../../d3v5.min.js"></script>
+   <script src="../d3-spiral-heatmap1.3.js"></script>
+
+   <style>
+
+        body {
+            font-family: sans-serif;
+ 	         color: #333;
+ 			   margin: 20px;
+            top: 20px;
+            right: 20px;
+            bottom: 20px;
+            left: 20px;
+        }
+
+        .chart {
+	        float: left;
+	        padding-right: 40px;
+	        padding-bottom: 50px;
+	        padding-top: 10px;
+        }
+
+        .chart p {
+	        font-weight: bold;
+	        margin: 0;
+        }
+
+        .key {
+	        margin-left: 70px;
+        }
+
+        .tick, .title {
+            font-family: sans-serif;
+        }
+
+        .footnote {
+	        clear: both;
+	        font-size: 11px;
+	        line-height: 150%;
+	        padding-top: 10px;
+	        color: #666;
+        }
+
+		.hoverValue {
+			text-anchor: middle;
+		}
+
+		.hoverIndex {
+			font-weight: bold;
+			font-size: 14px;
+		}
+
+		.hoverYear {
+			font-weight: normal;
+			font-size: 11px;
+			fill: #888;
+		}
+
+        line {
+            stroke: #E9E9E9;
+        }
+
+        .arc-label text {
+	        fill: #999;
+			font-weight: bold;
+	        font-size: 14px;
+        }
+
+        .coil-label {
+            fill: #333;
+/*
+   			stroke: #333;
+   			stroke-width: 2;
+			paint-order: stroke;
+*/
+            font-size: 7px;
+/*             font-weight: bold; */
+            pointer-events: none;
+        }
+
+        .offSeason {
+           /* font-weight: bold; */
+	        fill: #bbb;
+        }
+
+        .arc path {
+            stroke: #FFF;
+/*             stroke-width: 2; */
+        }
+
+   </style>
+
+</head>
+
+<body>
+
+    <h3>Bierabsatz (hl)</h3>
+
+    <div id="charts"></div>
+
+<!--
+	This uses "D3 Spiral Heatmap" (c) 2017 Tom Shanley, MIT License
+	https://github.com/tomshanley/d3-spiral-heatmap
+ -->
+
+ 	<p class="footnote">Daten: Statistisches Bundesamt 2022, Genesis <a href="https://www-genesis.destatis.de/genesis/online?operation=table&code=73421-0002">Table 73421-0002</a><br>
+ 	D3 Spiral Heatmap Modul von <a href="https://github.com/tomshanley/d3-spiral-heatmap">Tom Shanley</a></p>
+
+    <script>
+
+       	var de = d3.formatLocale({
+         	  decimal: ",",
+           // 	  thousands: "\xa0",
+         	  thousands: ".",
+         	  grouping: [3]
+        	});
+
+        	var decimal = de.format(",.0f");
+
+        	var DE = d3.timeFormatLocale({
+         	  dateTime: "%A, der %e. %B %Y, %X",
+         	  date: "%e.%m.%Y",
+         	  time: "%H:%M:%S",
+         	  periods: ["AM", "PM"],
+         	  days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+         	  shortDays: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
+         	  months: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
+         	  shortMonths: ["Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+        	});
+
+        //SVG dimensions
+        const chartWidth = 640
+        const chartHeight = chartWidth
+        const chartRadius = chartWidth / 2
+        const margin = { "top": 30, "bottom": 30, "left": 30, "right": 30 }
+
+        let dateParse = d3.timeParse("%d/%m/%Y")
+        let yearFormat = d3.timeFormat("%Y")
+        let monthFormat = DE.format("%b")
+
+        //Colour scale
+        var colour = d3.scaleSequential(d3.interpolateYlGn)  // RdBu, YlGn, YlOrRd, YlOrBr, BuPu
+// 		var colour = d3.scaleDiverging(d3.interpolateRdBu)
+
+        //Load the data, nest, sort and draw charts
+        d3.csv("bierabsatz.csv", convertTextToNumbers).then(function(data) {
+
+            //ENSURE THE DATA IS SORTED CORRECTLY, IN THIS CASE BY YEAR AND MONTH
+            //THE SPIRAL WILL START IN THE MIDDLE AND WORK OUTWARDS
+
+	            var extent = d3.extent(data, d=>d.bierabsatz)
+	            colour.domain([extent[0], extent[1]])
+
+                //set the options for the sprial heatmap
+                let heatmap = spiralHeatmap()
+                    .radius(chartRadius)
+                    .holeRadiusProportion(0.1)
+                    .arcsPerCoil(12)
+                    .coilPadding(0.01)
+                    .arcLabel("month")
+//                     .arcLabelOffset(15)
+                    .coilLabel("year")
+                    .coilLabelOffset(-2)
+
+                //CREATE SVG AND A G PLACED IN THE CENTRE OF THE SVG
+                const div = d3.select("#charts").append("div").attr("class","chart")
+
+                div.append("p").text("Deutschland")
+                const svg = div.append("svg")
+                    .attr("width", chartWidth + margin.left + margin.right)
+                    .attr("height", chartHeight + margin.top + margin.bottom);
+
+                const produktLegend = legend({
+					       color: colour,
+					       title: "Legende",
+						   tickValues: [extent[0], 100, extent[1]]
+				          })
+
+				div.append(() => produktLegend).attr("class","key")
+
+                const g = svg.append("g")
+                    .attr("transform", "translate("
+                    + (margin.left + chartRadius)
+                    + ","
+                    + (margin.top + chartRadius) + ")");
+
+                var hoverIndex = svg.append("text")
+                					.attr("class","hoverValue hoverIndex")
+                					.attr("x",chartWidth/2+margin.left)
+                					.attr("y",chartWidth/2+margin.top+7) // offset by half the font-size
+
+                var hoverYear = svg.append("text")
+                					.attr("class","hoverValue hoverYear")
+                					.attr("x",chartWidth/2+margin.left)
+                					.attr("y",chartWidth/2+margin.top+28) // offset by half the font-size
+
+                var hoverMonth = svg.append("text")
+                					.attr("class","hoverValue hoverYear")
+                					.attr("x",chartWidth/2+margin.left)
+                					.attr("y",chartWidth/2+margin.top-20) // offset by half the font-size
+
+                g.datum(data)
+                    .call(heatmap);
+
+                g.selectAll(".arc").select("path")
+                    .style("fill", d=> colour(d.bierabsatz))
+                    .attr("id",d=>d.month+d.year)
+                    .on("mouseover", function (d) {
+	                    d3.select(this).style("stroke","orange").style("stroke-width", 2)
+	                    hoverIndex.text(decimal(d.bierabsatz))
+	                    hoverYear.text(d.year)
+	                    hoverMonth.text(d.month)
+                    })
+                    .on("mouseout", function (d) {
+	                    d3.select(this).style("stroke","#fff").style("stroke-width", 1)
+	                    hoverIndex.text("")
+	                    hoverYear.text("")
+	                    hoverMonth.text("")
+                    })
+
+        })
+
+        function convertTextToNumbers(d) {
+            d.bierabsatz = +d.bierabsatz;
+            d.date = dateParse(d.date);
+            d.year = yearFormat(d.date);
+            d.month = monthFormat(d.date);
+            return d;
+        };
+
+		//
+		// https://observablehq.com/@d3/color-legend
+		//
+		function legend({
+		  color,
+		  title,
+		  tickSize = 6,
+		  width = 320,
+		  height = 44 + tickSize,
+		  marginTop = 18,
+		  marginRight = 0,
+		  marginBottom = 16 + tickSize,
+		  marginLeft = 0,
+		  ticks = width / 64,
+		  tickFormat = de.format(",.0f"),
+		  tickValues
+		} = {}) {
+
+		  const svg = d3.create("svg")
+		      .attr("width", width)
+		      .attr("height", height)
+		      .attr("viewBox", [0, 0, width, height])
+		      .style("overflow", "visible")
+		      .style("display", "block");
+
+		  let tickAdjust = g => g.selectAll(".tick line").attr("y1", marginTop + marginBottom - height);
+		  let x;
+
+		  // Sequential
+		    x = Object.assign(color.copy()
+		        .interpolator(d3.interpolateRound(marginLeft, width - marginRight)),
+		        {range() { return [marginLeft, width - marginRight]; }});
+
+			svg.append("image")
+		        .attr("x", marginLeft)
+		        .attr("y", marginTop)
+		        .attr("width", width - marginLeft - marginRight)
+		        .attr("height", height - marginTop - marginBottom)
+		        .attr("preserveAspectRatio", "none")
+		        .attr("xlink:href", ramp(color.interpolator()).toDataURL());
+
+
+		    if (!x.ticks) {
+		      if (tickValues === undefined) {
+		        const n = Math.round(ticks + 1);
+		        tickValues = d3.range(n).map(i => d3.quantile(color.domain(), i / (n - 1)));
+		      }
+		      if (typeof tickFormat !== "function") {
+		        tickFormat = d3.format(tickFormat === undefined ? ",f" : tickFormat);
+		      }
+		    }
+
+		  svg.append("g")
+		      .attr("transform", "translate(0 "+(height-marginBottom)+")")
+		      .call(d3.axisBottom(x)
+		        .ticks(ticks, typeof tickFormat === "string" ? tickFormat : undefined)
+		        .tickFormat(typeof tickFormat === "function" ? tickFormat : undefined)
+		        .tickSize(tickSize)
+		        .tickValues(tickValues))
+		      .call(tickAdjust)
+		      .call(g => g.select(".domain").remove())
+		      .call(g => g.append("text")
+		        .attr("x", marginLeft)
+		        .attr("y", marginTop + marginBottom - height - 6)
+		        .attr("fill", "currentColor")
+		        .attr("text-anchor", "start")
+// 		        .attr("font-weight", "bold")
+		        .attr("class", "title")
+		        .text(title));
+
+		  return svg.node();
+		}
+
+		function ramp(color, n = 256) {
+// 		  const canvas = DOM.canvas(n, 1);
+		  const canvas = d3.create("canvas").attr("width",n).attr("height",1).node()
+		  const context = canvas.getContext("2d");
+		  for (let i = 0; i < n; ++i) {
+		    context.fillStyle = color(i / (n - 1));
+		    context.fillRect(i, 0, 1, 1);
+		  }
+		  return canvas;
+		}
+
+    </script>
+
+</body>
